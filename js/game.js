@@ -14,6 +14,7 @@ const FORMATION_LEFT = 64;
 const FORMATION_TOP = 55;
 const CELL_W = 46, CELL_H = 38;
 const EXTRA_LIFE_SCORE = 20000;
+const TOTAL_STAGES = 32;
 
 // ============================================================
 // FIREBASE CONFIG & INIT
@@ -490,13 +491,13 @@ class Player {
 // ENEMY
 // ============================================================
 class Enemy {
-  constructor(type,row,col,targetX,targetY) {
+  constructor(type,row,col,targetX,targetY,bossHp=2) {
     this.type=type; // 'bee','butterfly','boss'
     this.row=row;this.col=col;
     this.targetX=targetX;this.targetY=targetY;
     this.w=type==='boss'?28:type==='butterfly'?22:18;
     this.h=type==='boss'?28:type==='butterfly'?18:16;
-    this.hp=type==='boss'?2:1;
+    this.hp=type==='boss'?bossHp:1;
     this.maxHp=this.hp;
     this.points=type==='boss'?200:type==='butterfly'?80:50;
     this.alive=true;
@@ -599,6 +600,11 @@ class Enemy {
       const curTargetX = this.targetX + (formationOffsetX || 0);
       this.x += (curTargetX - this.x) * 0.1;
       this.y += (this.targetY - this.y) * 0.1;
+
+      if (cooldownMult < 0.8 && this.shootCooldown <= 0 && Math.random() < 0.005) {
+        this.shootCooldown = randInt(100, 200) * cooldownMult;
+        return { shoot: true, x: this.x, y: this.y + this.h / 2 };
+      }
     }
     return null;
   }
@@ -761,8 +767,32 @@ class Game {
     this.setupTouchControls();
     this.startTitle();
   }
-  getSpeedMult() { return this.difficulty === 0 ? 0.75 : this.difficulty === 1 ? 1 : 1.3; }
-  getCooldownMult() { return this.difficulty === 0 ? 1.5 : this.difficulty === 1 ? 1 : 0.7; }
+  getStageSpeedMult() {
+    const st = Math.min(Math.max(1, this.stage), TOTAL_STAGES);
+    return 1.0 + (st - 1) * 0.04;
+  }
+  getStageCooldownMult() {
+    const st = Math.min(Math.max(1, this.stage), TOTAL_STAGES);
+    return Math.max(0.35, 1.0 - (st - 1) * 0.021);
+  }
+  getStageMaxDives() {
+    const st = Math.min(Math.max(1, this.stage), TOTAL_STAGES);
+    return Math.min(8, 1 + Math.floor((st - 1) * 7 / 31));
+  }
+  getStageBossHp() {
+    const st = Math.min(Math.max(1, this.stage), TOTAL_STAGES);
+    if (st >= 25) return 4;
+    if (st >= 13) return 3;
+    return 2;
+  }
+  getSpeedMult() {
+    const base = this.difficulty === 0 ? 0.75 : this.difficulty === 1 ? 1 : 1.3;
+    return base * this.getStageSpeedMult();
+  }
+  getCooldownMult() {
+    const base = this.difficulty === 0 ? 1.5 : this.difficulty === 1 ? 1 : 0.7;
+    return base * this.getStageCooldownMult();
+  }
   startTitle() {
     this.state='TITLE';
     this.audio.init();
@@ -808,11 +838,27 @@ class Game {
   }
   startNextStage() {
     this.stage++;
+    if (this.stage > TOTAL_STAGES) {
+      this.gameVictory();
+      return;
+    }
     this.state='STAGE_INTRO';
     this.stageIntroTimer=120;
     this.playerBullets=[];
     this.enemyBullets=[];
     this.audio.stageStart();
+  }
+  gameVictory() {
+    this.state = 'VICTORY';
+    this.audio.powerup();
+    const victoryBonus = 50000;
+    this.score += victoryBonus;
+    if (this.score > this.highScore) {
+      this.highScore = this.score;
+      localStorage.setItem('galaga_high', String(this.highScore));
+    }
+    this.flashMessage = 'ALL 32 STAGES CLEARED!';
+    this.flashTimer = 180;
   }
   beginStage() {
     this.state='PLAYING';
@@ -822,12 +868,12 @@ class Game {
     this.playerBullets=[];
     this.enemyBullets=[];
     this.bonusActive=false;
-    this.maxSimultaneousDives=1+Math.floor(this.stage/2);
-    if (this.maxSimultaneousDives>5) this.maxSimultaneousDives=5;
+    this.maxSimultaneousDives=this.getStageMaxDives();
     this.spawnFormation();
   }
   spawnFormation() {
     let idx=0;
+    const bossHp = this.getStageBossHp();
     for (let r=0;r<FORMATION_ROWS;r++) {
       for (let c=0;c<FORMATION_COLS;c++) {
         let type='bee';
@@ -836,7 +882,7 @@ class Game {
 
         const tx = FORMATION_LEFT+c*CELL_W;
         const ty = FORMATION_TOP+r*CELL_H;
-        const e = new Enemy(type,r,c,tx,ty);
+        const e = new Enemy(type,r,c,tx,ty,bossHp);
         e.entryProgress=idx*0.01;
         if (e.entryProgress>1) e.entryProgress=rand(0.5,0.9);
         e.entryDuration=60+idx*2;
@@ -897,6 +943,16 @@ class Game {
       this.gameOver();
     }
   }
+  handleEndGameTransition() {
+    if (this.score > 0 && this.leaderboard.qualifiesForTop10(this.score)) {
+      this.state = 'ENTER_NAME';
+      this.nameChars = ['A', 'A', 'A'];
+      this.nameIndex = 0;
+    } else {
+      this.state = 'LEADERBOARD';
+    }
+  }
+
   gameOver() {
     if (this.score > this.highScore) {
       this.highScore = this.score;
@@ -1006,6 +1062,7 @@ class Game {
         if (!this.enterPressed) {
           if (this.state==='TITLE') { this.audio.init(); this.startGame(); }
           else if (this.state==='GAME_OVER') { this.state='LEADERBOARD'; }
+          else if (this.state==='VICTORY') { this.handleEndGameTransition(); }
           else if (this.state==='LEADERBOARD') { this.startTitle(); }
           else if (this.state==='ENTER_NAME') { this.confirmLetter(); }
         }
@@ -1072,6 +1129,7 @@ class Game {
       this.audio.init();
       if (this.state==='TITLE') { e.preventDefault(); this.startGame(); }
       else if (this.state==='GAME_OVER') { e.preventDefault(); this.state='LEADERBOARD'; }
+      else if (this.state==='VICTORY') { e.preventDefault(); this.handleEndGameTransition(); }
       else if (this.state==='LEADERBOARD') { e.preventDefault(); this.startTitle(); }
     };
     document.addEventListener('touchstart',handleScreenTap,false);
@@ -1089,7 +1147,7 @@ class Game {
       this.highScore = this.score;
     }
 
-    if (this.state==='TITLE'||this.state==='GAME_OVER'||this.state==='LEADERBOARD'||this.state==='ENTER_NAME'||this.state==='SAVING_SCORE') return;
+    if (this.state==='TITLE'||this.state==='GAME_OVER'||this.state==='VICTORY'||this.state==='LEADERBOARD'||this.state==='ENTER_NAME'||this.state==='SAVING_SCORE') return;
 
     if (this.state==='STAGE_INTRO') {
       this.stageIntroTimer--;
@@ -1293,6 +1351,7 @@ class Game {
 
     if (this.state==='TITLE') { this.renderTitle(ctx); return; }
     if (this.state==='GAME_OVER') { this.renderGameOver(ctx); return; }
+    if (this.state==='VICTORY') { this.renderVictory(ctx); return; }
 
     // HUD
     this.renderHUD(ctx);
@@ -1348,7 +1407,7 @@ class Game {
     ctx.fillStyle='#ffffff';
     ctx.font='9px "Press Start 2P",monospace';
     ctx.textAlign='right';
-    ctx.fillText('STAGE '+this.stage,W-15,60);
+    ctx.fillText('STAGE '+this.stage+'/'+TOTAL_STAGES,W-15,60);
   }
 
   renderTitle(ctx) {
@@ -1401,8 +1460,8 @@ class Game {
   renderStageIntro(ctx) {
     ctx.textAlign='center';
     ctx.fillStyle='#ffffff';
-    ctx.font='30px "Press Start 2P",monospace';
-    ctx.fillText('STAGE '+this.stage,W/2,280);
+    ctx.font='24px "Press Start 2P",monospace';
+    ctx.fillText('STAGE '+this.stage+' / '+TOTAL_STAGES,W/2,280);
     ctx.fillStyle='#00ffff';
     ctx.font='14px "Press Start 2P",monospace';
     ctx.fillText('GET READY!',W/2,340);
@@ -1410,6 +1469,40 @@ class Game {
     for (const b of this.playerBullets) b.draw(ctx);
     for (const e of this.enemies) e.draw(ctx);
     this.player.draw(ctx);
+    this.particles.draw(ctx);
+  }
+
+  renderVictory(ctx) {
+    ctx.textAlign='center';
+    ctx.fillStyle='#00ff00';
+    ctx.font='28px "Press Start 2P",monospace';
+    ctx.shadowColor='#00ff00';ctx.shadowBlur=15;
+    ctx.fillText('VICTORY!',W/2,180);
+    ctx.shadowBlur=0;
+
+    ctx.fillStyle='#ffff00';
+    ctx.font='12px "Press Start 2P",monospace';
+    ctx.fillText('ALL 32 STAGES CLEARED!',W/2,235);
+
+    ctx.fillStyle='#ffffff';
+    ctx.font='11px "Press Start 2P",monospace';
+    ctx.fillText('COMPLETION BONUS',W/2,295);
+    ctx.fillStyle='#00ffff';
+    ctx.font='16px "Press Start 2P",monospace';
+    ctx.fillText('+50000 PTS',W/2,325);
+
+    ctx.fillStyle='#ffffff';
+    ctx.font='12px "Press Start 2P",monospace';
+    ctx.fillText('FINAL SCORE',W/2,380);
+    ctx.fillStyle='#ff00ff';
+    ctx.font='20px "Press Start 2P",monospace';
+    ctx.fillText(String(this.score).padStart(7,'0'),W/2,415);
+
+    ctx.fillStyle='#aaaaaa';
+    ctx.font='10px "Press Start 2P",monospace';
+    const blink = Math.floor(Date.now()/500)%2;
+    if (blink) ctx.fillText('PRESS ENTER TO CONTINUE',W/2,500);
+
     this.particles.draw(ctx);
   }
 
