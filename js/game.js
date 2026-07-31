@@ -847,6 +847,12 @@ class Game {
     this.playerBullets=[];
     this.enemyBullets=[];
     this.audio.stageStart();
+
+    if (this.stage > 0 && this.stage % 3 === 0) {
+      if (typeof showMonetagAd === 'function') {
+        showMonetagAd();
+      }
+    }
   }
   gameVictory() {
     this.state = 'VICTORY';
