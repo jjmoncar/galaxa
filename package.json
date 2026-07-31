@@ -1,0 +1,22 @@
+{
+  "name": "galaxa",
+  "version": "1.0.0",
+  "description": "A complete, playable Galaxa-style arcade game built with HTML5 Canvas + vanilla JavaScript",
+  "main": "index.html",
+  "scripts": {
+    "dev": "npx serve .",
+    "build": "echo 'No build step needed for static site'",
+    "lint": "echo 'No linter configured'"
+  },
+  "keywords": [
+    "game",
+    "arcade",
+    "html5",
+    "canvas"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@vercel/analytics": "^1.1.1"
+  }
+}
