@@ -815,6 +815,7 @@ class Game {
     this.lives=2;
     this.extraLifeTriggered=0;
     this.stage=0;
+    this.completedLevels=0;
     this.player=new Player();
     this.enemies=[];
     this.playerBullets=[];
@@ -847,12 +848,6 @@ class Game {
     this.playerBullets=[];
     this.enemyBullets=[];
     this.audio.stageStart();
-
-    if (this.stage > 0 && this.stage % 2 === 0) {
-      if (typeof showMonetagAd === 'function') {
-        showMonetagAd();
-      }
-    }
   }
   gameVictory() {
     this.state = 'VICTORY';
@@ -927,6 +922,13 @@ class Game {
     if (alive.length===0) {
       this.waveComplete=true;
       this.transitionTimer = 90;
+      this.completedLevels++;
+
+      if (this.completedLevels > 0 && this.completedLevels % 2 === 0) {
+        if (typeof showMonetagAd === 'function') {
+          showMonetagAd();
+        }
+      }
     }
   }
   playerCapturedByBoss() {

@@ -8,10 +8,20 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 </head>
+<script>(function(s){s.dataset.zone='11471089',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')))</script>
 <script>
   function showMonetagAd() {
     try {
-      (function(s){s.dataset.zone='11471089',s.src='https://al5sm.com/tag.min.js'})([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')));
+      if (typeof window.show_11471089 === 'function') {
+        window.show_11471089();
+      }
+      const oldScripts = document.querySelectorAll('script[data-zone="11471089"]');
+      oldScripts.forEach(s => s.remove());
+
+      (function(s){
+        s.dataset.zone='11471089';
+        s.src='https://al5sm.com/tag.min.js?r=' + Date.now();
+      })([document.documentElement, document.body].filter(Boolean).pop().appendChild(document.createElement('script')));
     } catch(e) {
       console.warn('Monetag ad script error:', e);
     }
