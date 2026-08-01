@@ -848,12 +848,6 @@ class Game {
     this.playerBullets=[];
     this.enemyBullets=[];
     this.audio.stageStart();
-
-    if (this.stage > 1 && (this.stage - 1) % 2 === 0) {
-      if (typeof showMonetagAd === 'function') {
-        showMonetagAd();
-      }
-    }
   }
   gameVictory() {
     this.state = 'VICTORY';
@@ -929,12 +923,6 @@ class Game {
       this.waveComplete=true;
       this.transitionTimer = 90;
       this.completedLevels++;
-
-      if (this.completedLevels > 0 && this.completedLevels % 2 === 0) {
-        if (typeof showMonetagAd === 'function') {
-          showMonetagAd();
-        }
-      }
     }
   }
   playerCapturedByBoss() {
