@@ -42,4 +42,10 @@ Since it's a single static HTML file, no build step is needed. Just point Vercel
 
 ## Play Locally
 
+Download and Install Xampp
+
+Open Xampp and start Apache and PHP
+
+Put the folder galaxa in the htdocs folder C:\xampp\htdocs
+
 Open `index.html` in any modern browser. That's it.
