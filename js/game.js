@@ -17,27 +17,13 @@ const EXTRA_LIFE_SCORE = 20000;
 const TOTAL_STAGES = 32;
 
 // ============================================================
-// FIREBASE CONFIG & INIT
+// JSON SCORE STORAGE API
 // ============================================================
-const firebaseConfig = {
-  apiKey: "AIzaSyA2ZfaCfbkVNR76ypT6QOvgJx_CXk4CzN0",
-  authDomain: "galagadb-24cdc.firebaseapp.com",
-  projectId: "galagadb-24cdc",
-  storageBucket: "galagadb-24cdc.firebasestorage.app",
-  messagingSenderId: "957856071752",
-  appId: "1:957856071752:web:f35063a0ab83631e8f987d",
-  measurementId: "G-CEQQ3GS6DQ"
-};
-
-let db = null;
-if (typeof firebase !== 'undefined') {
-  firebase.initializeApp(firebaseConfig);
-  db = firebase.firestore();
-}
-
 class LeaderboardManager {
   constructor() {
     this.scores = [];
+    this.apiUrl = 'scores.php';
+    this.jsonFileUrl = 'scores.json';
     this.loadLocalScores();
   }
   loadLocalScores() {
@@ -53,38 +39,27 @@ class LeaderboardManager {
   }
   async fetchTop10() {
     this.loadLocalScores();
-    if (!db) return this.scores;
     try {
-      const fetchPromise = db.collection('leaderboard')
-        .orderBy('score', 'desc')
-        .limit(10)
-        .get();
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000));
-      const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
-      const remoteScores = [];
-      snapshot.forEach(doc => {
-        const d = doc.data();
-        if (d && d.name && typeof d.score === 'number') {
-          remoteScores.push({ name: String(d.name).toUpperCase(), score: Number(d.score) });
-        }
-      });
-      if (remoteScores.length > 0) {
-        const combined = [...this.scores, ...remoteScores];
-        combined.sort((a, b) => b.score - a.score);
-        const unique = [];
-        const seen = new Set();
-        for (const item of combined) {
-          const key = `${item.name}_${item.score}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            unique.push(item);
+      let res = await fetch(this.apiUrl, { cache: 'no-cache' }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(this.jsonFileUrl, { cache: 'no-cache' }).catch(() => null);
+      }
+      if (res && res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const remoteScores = data
+            .filter(d => d && d.name && typeof d.score === 'number')
+            .map(d => ({ name: String(d.name).toUpperCase().substring(0, 3), score: Number(d.score) }));
+
+          if (remoteScores.length > 0) {
+            remoteScores.sort((a, b) => b.score - a.score);
+            this.scores = remoteScores.slice(0, 10);
+            this.saveLocalScores();
           }
         }
-        this.scores = unique.slice(0, 10);
-        this.saveLocalScores();
       }
     } catch(e) {
-      console.warn('Firebase fetch error (using local fallback):', e);
+      console.warn('JSON fetch error (using local fallback):', e);
     }
     return this.scores;
   }
@@ -98,18 +73,22 @@ class LeaderboardManager {
     this.scores = this.scores.slice(0, 10);
     this.saveLocalScores();
 
-    if (!db) return;
     try {
-      const savePromise = db.collection('leaderboard').add({
-        name: cleanName,
-        score: scoreNum,
-        createdAt: new Date().toISOString()
+      const res = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: cleanName, score: scoreNum })
       });
-      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000));
-      await Promise.race([savePromise, timeoutPromise]);
-      console.log("Score successfully saved to Firebase!");
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.scores)) {
+          this.scores = data.scores.map(d => ({ name: String(d.name).toUpperCase().substring(0, 3), score: Number(d.score) }));
+          this.saveLocalScores();
+        }
+        console.log("Score successfully saved to JSON file!");
+      }
     } catch(e) {
-      console.warn('Firebase save error (saved locally):', e);
+      console.warn('JSON save error (saved locally):', e);
     }
   }
   qualifiesForTop10(score) {
